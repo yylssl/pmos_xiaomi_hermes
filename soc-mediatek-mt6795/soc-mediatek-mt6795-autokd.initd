@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+
+name="soc-mediatek-mt6795-autokd"
+description="Mediatek MT6795 Autok Daemon"
+command=/usr/sbin/autokd
+pidfile="/run/autokd.pid"
+command_background=true

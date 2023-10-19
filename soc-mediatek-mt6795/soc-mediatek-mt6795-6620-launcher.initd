@@ -1,0 +1,8 @@
+#!/sbin/openrc-run
+
+name="soc-mediatek-mt6795-6620-launcher"
+description="Mediatek MT6795 6620 Launcher"
+command=/usr/sbin/6620_launcher
+command_args="-m 4 -p /lib/firmware/postmarketos/"
+pidfile="/run/6620_launcher.pid"
+command_background=true

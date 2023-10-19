@@ -1,0 +1,35 @@
+# Reference: <https://postmarketos.org/devicepkg>
+pkgname=device-xiaomi-hermes
+pkgdesc="xiaomi Xiaomi Redmi Note 2"
+pkgver=0.1
+pkgrel=0
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	linux-xiaomi-hermes
+	mkbootimg
+	postmarketos-base
+	firmware-xiaomi-hermes
+	soc-mediatek-mt6795
+	soc-mediatek-mt6795-openrc
+"
+makedepends="devicepkg-dev"
+source="
+	deviceinfo
+	modules-initfs
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+}
+
+sha512sums="
+4bc4972364235876f13a4fbf04d3fbc674b88b757c44d234b9cda120436f9010807356d05b0a06bba8afb8850a90b57901e5898a34ef9e14bd3f50005fc6eee4  deviceinfo
+03cab135b4d8d249724a36e30af94404ad56fb14f30819838a2fa35a84ec4f65152a72db7534c97fcfe0aa4de16c112f556f799f66ec8134f76aba84efc3eafa  modules-initfs
+"

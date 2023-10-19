@@ -1,0 +1,28 @@
+# Contributor:
+# Maintainer:
+pkgname=firmware-xiaomi-hermes
+pkgver=1
+pkgrel=0
+pkgdesc="Firmware for Xiaomi Redmi Note 2"
+url="https://postmarketos.org"
+arch="aarch64"
+license="proprietary"
+
+_repository="android_vendor_xiaomi_hermes"
+_commit="e2f5deb4e4406bcfc05ec8935907d8cca16a5e73"
+source="
+	$pkgname-$_commit.tar.gz::https://github.com/yylssl/$_repository/archive/$_commit.tar.gz
+"
+
+builddir="$srcdir/$_repository-$_commit"
+
+package() {
+	cd "$builddir"
+	install -Dm0644 proprietary/vendor/etc/firmware/WIFI_RAM_CODE_MT6630 -t "$pkgdir/lib/firmware/postmarketos/"
+	install -Dm0644 proprietary/vendor/etc/firmware/*.* -t "$pkgdir/lib/firmware/postmarketos/"
+	install -Dm0644 proprietary/vendor/etc/firmware/mt6630/*.* -t "$pkgdir/lib/firmware/postmarketos/mt6630/"
+}
+
+sha512sums="
+d758abb175da06b3e39226edf88e1acd87127408a3f94857d8d1fc4a27ca0c1b28a18c9270d805a55893595c10275defa010078f749f8725a97c80f3127e84f8  firmware-xiaomi-hermes-e2f5deb4e4406bcfc05ec8935907d8cca16a5e73.tar.gz
+"

@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+
+name="enable-wlan0"
+description="Mediatek MT6795 Enable Wlan0"
+command=/usr/sbin/enable-wlan0
+pidfile="/run/enable-wlan0.pid"
+command_background=true

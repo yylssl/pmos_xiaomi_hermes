@@ -1,0 +1,66 @@
+# Contributor:
+# Maintainer:
+pkgname=soc-mediatek-mt6795
+pkgver=1
+pkgrel=0
+pkgdesc="Common package for Mediatek MT6795 devices"
+url="https://postmarketos.org"
+arch="aarch64"
+license="proprietary"
+depends="
+	libstdc++
+"
+makedepends="
+	gcc
+	g++
+	make
+	linux-headers
+"
+subpackages="
+	$pkgname-openrc:openrc
+"
+
+_repository="mt6795_tools"
+_commit="07117d8cf81d3b0fa6dbee38e8f95f4b05ddcc9f"
+source="
+	$pkgname-$_commit.tar.gz::https://github.com/yylssl/$_repository/archive/$_commit.tar.gz
+	enable-wlan0
+	soc-mediatek-mt6795-autokd.initd
+	soc-mediatek-mt6795-wmt-loader.initd
+	soc-mediatek-mt6795-6620-launcher.initd
+	soc-mediatek-mt6795-enable-wlan0.initd
+	soc-mediatek-mt6795-openrc.post-install
+"
+
+builddir="$srcdir/$_repository-$_commit"
+
+build() {
+	make -C "$builddir"
+}
+
+package() {
+	install -Dm0755 "$builddir"/autokd/autokd -t "$pkgdir/usr/sbin/"
+	install -Dm0755 "$builddir"/wmt_loader/wmt_loader -t "$pkgdir/usr/sbin/"
+	install -Dm0755 "$builddir"/6620_launcher/6620_launcher -t "$pkgdir/usr/sbin/"
+	install -Dm0755 "$srcdir"/enable-wlan0 -t "$pkgdir/usr/sbin/"
+}
+
+openrc() {
+	install="$subpkgname.post-install"
+	mkdir -p "$subpkgdir"
+
+	install -Dm0755 "$srcdir"/soc-mediatek-mt6795-autokd.initd "$subpkgdir"/etc/init.d/soc-mediatek-mt6795-autokd
+	install -Dm0755 "$srcdir"/soc-mediatek-mt6795-wmt-loader.initd "$subpkgdir"/etc/init.d/soc-mediatek-mt6795-wmt-loader
+	install -Dm0755 "$srcdir"/soc-mediatek-mt6795-6620-launcher.initd "$subpkgdir"/etc/init.d/soc-mediatek-mt6795-6620-launcher
+	install -Dm0755 "$srcdir"/soc-mediatek-mt6795-enable-wlan0.initd "$subpkgdir"/etc/init.d/soc-mediatek-mt6795-enable-wlan0
+}
+
+sha512sums="
+d106190614eb54dbd2a37283d4810a11e21c7bb960ce65e49618512148ceacf62da64a0aee3df2649a72f886190f606156e0007c50e6f2947d8e6a10221dc1e4  soc-mediatek-mt6795-07117d8cf81d3b0fa6dbee38e8f95f4b05ddcc9f.tar.gz
+90bdd0a81b79e44e013f8083a7c4078fb8278f98236748a04ec630aec35c33c61131a5378d35c873a95484e720c26e9128457e81e7752be3ffaff9429d642234  enable-wlan0
+a7566508e3a8477323f368aef0690b34cc37e596767a02ffdbf6858690aef8ae3f4b7899f9b49f8d6d3da72e30a168264bfcdc5a113a12247e07cacb99b9c1c3  soc-mediatek-mt6795-autokd.initd
+65929f27278a9921f375e8ab48e7a2aafd29eabdcca2e3fb09f87fb92a8d1e01bd7df56da5d8992d795dd4c316082350d213381b8dff89b0712c89ff51bdf92f  soc-mediatek-mt6795-wmt-loader.initd
+2b9852c4b41325e6cc20d9f3286c3f72142ca87f47fa0f381596c636467c92f5ea8fa30312826dc594a231f50ed07b57b86c6c9794f4797a2354c1c8755ed520  soc-mediatek-mt6795-6620-launcher.initd
+62d9c5bc1c81bc3530add186f4885d18f3d36024c4af369a2519611c159d1c076ace74bfab6c425e423209fe0b830dd493625219e49171c830e37ab90012d9bc  soc-mediatek-mt6795-enable-wlan0.initd
+dd8aac15b3394a15b3d78192fad5049bb1b8e18fdd212182baa92443f79a659960aa1df589f1c82e4bc766cdafd6b310ea6950a9335b85c826cc1f4a4b0501a5  soc-mediatek-mt6795-openrc.post-install
+"

@@ -1,0 +1,7 @@
+#!/sbin/openrc-run
+
+name="soc-mediatek-mt6795-wmt-loader"
+description="Mediatek MT6795 WMT Loader"
+command=/usr/sbin/wmt_loader
+pidfile="/run/wmt_loader.pid"
+command_background=true

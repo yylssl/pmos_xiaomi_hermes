@@ -1,0 +1,234 @@
+diff --git a/arch/arm64/kernel/traps.c b/arch/arm64/kernel/traps.c
+index 7da4cb8d..e9b63f38 100644
+--- a/arch/arm64/kernel/traps.c
++++ b/arch/arm64/kernel/traps.c
+@@ -245,8 +245,7 @@ void die(const char *str, struct pt_regs *regs, int err)
+ 
+ 	bust_spinlocks(0);
+ 	add_taint(TAINT_DIE, LOCKDEP_NOW_UNRELIABLE);
+-	/* keep preemption/irq disabled in KE flow to prevent context switch*/
+-	//raw_spin_unlock_irq(&die_lock);
++	raw_spin_unlock_irq(&die_lock);
+ 	oops_exit();
+ 
+ 	if (in_interrupt())
+diff --git a/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c b/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
+index 3b5ef3fa..9cbed44a 100644
+--- a/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
++++ b/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
+@@ -247,7 +247,7 @@ inline int ipanic_next_write(fn_next next, void *data, int off, int total, int e
+ 	return ipanic_func_write(next, data, off, total, encrypt);
+ }
+ 
+-inline int ipanic_mem_write(void *buf, int off, int len, int encrypt)
++int ipanic_mem_write(void *buf, int off, int len, int encrypt)
+ {
+ 	struct ipanic_memory_block mem_info = {
+ 		.kstart = (unsigned long)buf,
+diff --git a/drivers/misc/mediatek/connectivity/combo/common/core/include/wmt_conf.h b/drivers/misc/mediatek/connectivity/combo/common/core/include/wmt_conf.h
+index 7c6f6750..de5aa815 100644
+--- a/drivers/misc/mediatek/connectivity/combo/common/core/include/wmt_conf.h
++++ b/drivers/misc/mediatek/connectivity/combo/common/core/include/wmt_conf.h
+@@ -19,7 +19,7 @@
+ ********************************************************************************
+ */
+ #define CUST_CFG_WMT "WMT.cfg"
+-#define CUST_CFG_WMT_PREFIX "/system/etc/firmware/"
++#define CUST_CFG_WMT_PREFIX "/lib/firmware/postmarketos/"
+ 
+ /*******************************************************************************
+ *                    E X T E R N A L   R E F E R E N C E S
+diff --git a/drivers/misc/mediatek/connectivity/combo/common/linux/stp_chrdev_ant.c b/drivers/misc/mediatek/connectivity/combo/common/linux/stp_chrdev_ant.c
+index e252ae69..2f12dad2 100644
+--- a/drivers/misc/mediatek/connectivity/combo/common/linux/stp_chrdev_ant.c
++++ b/drivers/misc/mediatek/connectivity/combo/common/linux/stp_chrdev_ant.c
+@@ -21,8 +21,8 @@ MODULE_LICENSE("Dual BSD/GPL");
+ #define ANT_DRIVER_NAME "mtk_stp_ANT_chrdev"
+ #define ANT_DEV_MAJOR 197	/* never used number */
+ static PINT8 ANT_BUILT_IN_PATCH_FILE_NAME;
+-static PINT8 ANT_BUILT_IN_PATCH_FILE_NAME_E1 = "/system/etc/firmware/ANT_RAM_CODE_E1.BIN";
+-static PINT8 ANT_BUILT_IN_PATCH_FILE_NAME_E2 = "/system/etc/firmware/ANT_RAM_CODE_E2.BIN";
++static PINT8 ANT_BUILT_IN_PATCH_FILE_NAME_E1 = "/lib/firmware/postmarketos/ANT_RAM_CODE_E1.BIN";
++static PINT8 ANT_BUILT_IN_PATCH_FILE_NAME_E2 = "/lib/firmware/postmarketos/ANT_RAM_CODE_E2.BIN";
+ 
+ #define PFX                         "[MTK-ANT] "
+ #define ANT_LOG_DBG                  3
+diff --git a/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c b/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
+index bce4edca..92a39639 100755
+--- a/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
++++ b/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
+@@ -883,6 +883,7 @@ static mm_segment_t orgfs;
+ static PUINT_8 apucFwPath[] = { 
+ 	(PUINT_8) "/storage/sdcard0/",
+ 	(PUINT_8) "/etc/firmware/",
++	(PUINT_8) "/lib/firmware/postmarketos/",
+ 	NULL
+ };
+ 
+diff --git a/drivers/misc/mediatek/connectivity/conn_soc/common/core/include/wmt_conf.h b/drivers/misc/mediatek/connectivity/conn_soc/common/core/include/wmt_conf.h
+index 7ad0fca5..0dd30b3f 100644
+--- a/drivers/misc/mediatek/connectivity/conn_soc/common/core/include/wmt_conf.h
++++ b/drivers/misc/mediatek/connectivity/conn_soc/common/core/include/wmt_conf.h
+@@ -33,7 +33,7 @@
+ ********************************************************************************
+ */
+ #define CUST_CFG_WMT "WMT_SOC.cfg"
+-#define CUST_CFG_WMT_PREFIX "/system/etc/firmware/"
++#define CUST_CFG_WMT_PREFIX "/lib/firmware/postmarketos/"
+ 
+ /*******************************************************************************
+ *                    E X T E R N A L   R E F E R E N C E S
+diff --git a/drivers/misc/mediatek/eemcs/eemcs_expt.c b/drivers/misc/mediatek/eemcs/eemcs_expt.c
+index aee65a62..a8e55472 100644
+--- a/drivers/misc/mediatek/eemcs/eemcs_expt.c
++++ b/drivers/misc/mediatek/eemcs/eemcs_expt.c
+@@ -1103,7 +1103,7 @@ void eemcs_expt_reset_statistics(void)
+ }
+ 
+ #define EEMCS_EXCEPTION_LOG_TO_FILE  1
+-#define EEMCS_EXCEPTION_LOG_PATH    "/system/etc/firmware"
++#define EEMCS_EXCEPTION_LOG_PATH    "/lib/firmware/postmarketos"
+ 
+ /*
+  * @brief Flush all packets in exception instance to files for debugging
+diff --git a/drivers/misc/mediatek/eemcs/eemcs_fs_ut.c b/drivers/misc/mediatek/eemcs/eemcs_fs_ut.c
+index 827eb604..27ef2176 100644
+--- a/drivers/misc/mediatek/eemcs/eemcs_fs_ut.c
++++ b/drivers/misc/mediatek/eemcs/eemcs_fs_ut.c
+@@ -62,7 +62,7 @@
+ #define MD_ROOT_DIR                     "Z:"
+ #define DSP_ROOT_DIR                    "Y:"
+ #define FS_ROOT_DIR                     "/data/nvram/md1"
+-#define FS_DSP_ROOT_DIR                 "/system/etc/firmware"
++#define FS_DSP_ROOT_DIR                 "/lib/firmware/postmarketos"
+ 
+ #define MAX_FS_PKT_BYTE                 (0x1000 - 128)
+ #define CCCI_FS_REQ_SEND_AGAIN          0x80000000
+diff --git a/drivers/misc/mediatek/mach/mt6795/include/mach/md32_helper.h b/drivers/misc/mediatek/mach/mt6795/include/mach/md32_helper.h
+index f6a703b8..b5cedd51 100644
+--- a/drivers/misc/mediatek/mach/mt6795/include/mach/md32_helper.h
++++ b/drivers/misc/mediatek/mach/mt6795/include/mach/md32_helper.h
+@@ -42,8 +42,8 @@ extern struct md32_regs md32reg;
+ #define MD32_JTAG_GPIO_DVT 0
+ 
+ #ifdef CONFIG_MTK_LDVT
+-  #define MD32_DATA_IMAGE_PATH "/system/etc/firmware/md32_d.bin"
+-  #define MD32_PROGRAM_IMAGE_PATH "/system/etc/firmware/md32_p.bin"
++  #define MD32_DATA_IMAGE_PATH "/lib/firmware/postmarketos/md32_d.bin"
++  #define MD32_PROGRAM_IMAGE_PATH "/lib/firmware/postmarketos/md32_p.bin"
+ #else
+   #define MD32_DATA_IMAGE_PATH "/etc/firmware/md32_d.bin"
+   #define MD32_PROGRAM_IMAGE_PATH "/etc/firmware/md32_p.bin"
+diff --git a/drivers/misc/mediatek/wmt_ccci/wmt_cfg_parser.h b/drivers/misc/mediatek/wmt_ccci/wmt_cfg_parser.h
+index 54aea826..4dea8714 100644
+--- a/drivers/misc/mediatek/wmt_ccci/wmt_cfg_parser.h
++++ b/drivers/misc/mediatek/wmt_ccci/wmt_cfg_parser.h
+@@ -56,7 +56,7 @@ extern unsigned int wmtCcciLogLvl;
+ #endif
+ 
+ #define WMT_CFG_FILE "WMT_SOC.cfg"
+-#define WMT_CFG_FILE_PREFIX "/system/etc/firmware/"
++#define WMT_CFG_FILE_PREFIX "/lib/firmware/postmarketos/"
+ 
+ /*******************************************************************************
+ *                             D A T A   T Y P E S
+diff --git a/kernel/printk.c b/kernel/printk.c
+index 5f62f1f9..5e5b5c7a 100644
+--- a/kernel/printk.c
++++ b/kernel/printk.c
+@@ -275,7 +275,7 @@ static u32 log_buf_len = __LOG_BUF_LEN;
+ #ifdef CONFIG_MT_PRINTK_UART_CONSOLE
+ 
+ extern int mt_need_uart_console;
+-inline void mt_disable_uart()
++void mt_disable_uart()
+ {
+     if (mt_need_uart_console == 0) {
+         printk("<< printk console disable >>\n");
+@@ -284,7 +284,7 @@ inline void mt_disable_uart()
+         printk("<< printk console can't be disabled >>\n");
+     }
+ }
+-inline void mt_enable_uart()
++void mt_enable_uart()
+ {
+     if (mt_need_uart_console == 1) {
+         if (printk_disable_uart == 0)
+diff --git a/net/ipv6/addrconf.c b/net/ipv6/addrconf.c
+index 9d6d4b73..e9e57e34 100644
+--- a/net/ipv6/addrconf.c
++++ b/net/ipv6/addrconf.c
+@@ -3625,6 +3625,7 @@ static void addrconf_verify(unsigned long foo)
+ 	struct inet6_ifaddr *ifp;
+ 	int i;
+ 
++	pr_debug("addrconf_verify ++\n");
+ 	rcu_read_lock_bh();
+ 	spin_lock(&addrconf_verify_lock);
+ 	now = jiffies;
+@@ -3731,6 +3732,7 @@ restart:
+ 	add_timer(&addr_chk_timer);
+ 	spin_unlock(&addrconf_verify_lock);
+ 	rcu_read_unlock_bh();
++	pr_debug("addrconf_verify --\n");
+ }
+ 
+ static struct in6_addr *extract_addr(struct nlattr *addr, struct nlattr *local)
+diff --git a/net/wireless/ethtool.c b/net/wireless/ethtool.c
+index e37862f1..bfadeb32 100644
+--- a/net/wireless/ethtool.c
++++ b/net/wireless/ethtool.c
+@@ -9,8 +9,11 @@ static void cfg80211_get_drvinfo(struct net_device *dev,
+ {
+ 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+ 
+-	strlcpy(info->driver, wiphy_dev(wdev->wiphy)->driver->name,
+-		sizeof(info->driver));
++	if (wiphy_dev(wdev->wiphy))
++		strlcpy(info->driver, wiphy_dev(wdev->wiphy)->driver->name,
++			sizeof(info->driver));
++	else
++		strlcpy(info->driver, "",sizeof(info->driver));
+ 
+ 	strlcpy(info->version, init_utsname()->release, sizeof(info->version));
+ 
+@@ -20,8 +23,11 @@ static void cfg80211_get_drvinfo(struct net_device *dev,
+ 	else
+ 		strlcpy(info->fw_version, "N/A", sizeof(info->fw_version));
+ 
+-	strlcpy(info->bus_info, dev_name(wiphy_dev(wdev->wiphy)),
+-		sizeof(info->bus_info));
++	if (wiphy_dev(wdev->wiphy)) 
++		strlcpy(info->bus_info, dev_name(wiphy_dev(wdev->wiphy)),
++			sizeof(info->bus_info));
++	else
++		strlcpy(info->bus_info, "",sizeof(info->bus_info));
+ }
+ 
+ static int cfg80211_get_regs_len(struct net_device *dev)
+diff --git a/scripts/dtc/dtc-lexer.l b/scripts/dtc/dtc-lexer.l
+index 3b41bfca..9b9c29e6 100644
+--- a/scripts/dtc/dtc-lexer.l
++++ b/scripts/dtc/dtc-lexer.l
+@@ -39,7 +39,7 @@ LINECOMMENT	"//".*\n
+ #include "srcpos.h"
+ #include "dtc-parser.tab.h"
+ 
+-YYLTYPE yylloc;
++extern YYLTYPE yylloc;
+ 
+ /* CAUTION: this will stop working if we ever use yyless() or yyunput() */
+ #define	YY_USER_ACTION \
+diff --git a/scripts/dtc/dtc-lexer.lex.c_shipped b/scripts/dtc/dtc-lexer.lex.c_shipped
+index 2d30f417..d0eb405c 100644
+--- a/scripts/dtc/dtc-lexer.lex.c_shipped
++++ b/scripts/dtc/dtc-lexer.lex.c_shipped
+@@ -637,7 +637,7 @@ char *yytext;
+ #include "srcpos.h"
+ #include "dtc-parser.tab.h"
+ 
+-YYLTYPE yylloc;
++extern YYLTYPE yylloc;
+ 
+ /* CAUTION: this will stop working if we ever use yyless() or yyunput() */
+ #define	YY_USER_ACTION \

@@ -1,0 +1,5 @@
+#!/bin/sh
+rc-update add soc-mediatek-mt6795-autokd default
+rc-update add soc-mediatek-mt6795-wmt-loader default
+rc-update add soc-mediatek-mt6795-6620-launcher default
+rc-update add soc-mediatek-mt6795-enable-wlan0 default

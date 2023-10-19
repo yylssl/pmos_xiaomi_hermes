@@ -1,0 +1,66 @@
+# Reference: <https://postmarketos.org/vendorkernel>
+# Kernel config based on: arch/arm64/configs/(CHANGEME!)
+
+pkgname=linux-xiaomi-hermes
+pkgver=3.10.61
+pkgrel=0
+pkgdesc="xiaomi Xiaomi Redmi Note 2 kernel fork"
+arch="aarch64"
+_carch="arm64"
+_flavor="xiaomi-hermes"
+url="https://kernel.org"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps pmb:cross-native"
+makedepends="
+	bash
+	bc
+	bison
+	devicepkg-dev
+	findutils
+	flex
+	openssl-dev
+	perl
+	gcc6
+	gcc6-aarch64
+"
+
+# Source
+_repository="Xiaomi_Kernel_OpenSource"
+_commit="be46505a04802215691794970fe251cb152b440e"
+_config="config-$_flavor.$arch"
+source="
+	$pkgname-$_commit.tar.gz::https://github.com/MiCode/$_repository/archive/$_commit.tar.gz
+	$_config
+	mt6795-firmware-path.patch
+"
+builddir="$srcdir/$_repository-$_commit"
+_outdir="out"
+
+# Compiler: GCC 6 (doesn't boot when compiled with newer versions)
+if [ "${CC:0:5}" != "gcc6-" ]; then
+	CC="gcc6-$CC"
+	HOSTCC="gcc6-gcc"
+	CROSS_COMPILE="gcc6-$CROSS_COMPILE"
+fi
+
+prepare() {
+	default_prepare
+	. downstreamkernel_prepare
+}
+
+build() {
+	unset LDFLAGS
+	make O="$_outdir" ARCH="$_carch" CC="${CC:-gcc}" \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-postmarketOS"
+}
+
+package() {
+	downstreamkernel_package "$builddir" "$pkgdir" "$_carch" \
+		"$_flavor" "$_outdir"
+}
+
+sha512sums="
+ffdcc89f9095cad0f4e14ce1c55971939a2f296cd0bf44b4574a3951a0b59034e42d0d033b187bab2c1732b1cf2885be47d215050d9c9e9e0cecc43c297073f2  linux-xiaomi-hermes-be46505a04802215691794970fe251cb152b440e.tar.gz
+23feec439fef280207861fd99f40075edf2632a26a744cd1d223ad44ec0df9f0c7756b3ee32333495e0cc0ae9e43ad2986d8a83df252e6657508fc2fc3ce40c8  config-xiaomi-hermes.aarch64
+24e134ade27e1dea62c5d88b9225a85c8ac468e4fbd341b813139fa97d105e8c4f55538ebedf7409030f4bffd08cbf7c15b861585a3119de964edee6a230f75b  mt6795-firmware-path.patch
+"
