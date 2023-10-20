@@ -1,0 +1,35 @@
+diff --git a/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c b/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
+index 3b5ef3fa..9cbed44a 100644
+--- a/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
++++ b/drivers/misc/mediatek/aee/ipanic/ipanic_rom.c
+@@ -247,7 +247,7 @@ inline int ipanic_next_write(fn_next next, void *data, int off, int total, int e
+ 	return ipanic_func_write(next, data, off, total, encrypt);
+ }
+ 
+-inline int ipanic_mem_write(void *buf, int off, int len, int encrypt)
++int ipanic_mem_write(void *buf, int off, int len, int encrypt)
+ {
+ 	struct ipanic_memory_block mem_info = {
+ 		.kstart = (unsigned long)buf,
+diff --git a/kernel/printk.c b/kernel/printk.c
+index 5f62f1f9..5e5b5c7a 100644
+--- a/kernel/printk.c
++++ b/kernel/printk.c
+@@ -275,7 +275,7 @@ static u32 log_buf_len = __LOG_BUF_LEN;
+ #ifdef CONFIG_MT_PRINTK_UART_CONSOLE
+ 
+ extern int mt_need_uart_console;
+-inline void mt_disable_uart()
++void mt_disable_uart()
+ {
+     if (mt_need_uart_console == 0) {
+         printk("<< printk console disable >>\n");
+@@ -284,7 +284,7 @@ inline void mt_disable_uart()
+         printk("<< printk console can't be disabled >>\n");
+     }
+ }
+-inline void mt_enable_uart()
++void mt_enable_uart()
+ {
+     if (mt_need_uart_console == 1) {
+         if (printk_disable_uart == 0)

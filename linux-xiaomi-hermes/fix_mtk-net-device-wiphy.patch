@@ -1,0 +1,32 @@
+diff --git a/net/wireless/ethtool.c b/net/wireless/ethtool.c
+index e37862f1..bfadeb32 100644
+--- a/net/wireless/ethtool.c
++++ b/net/wireless/ethtool.c
+@@ -9,8 +9,11 @@ static void cfg80211_get_drvinfo(struct net_device *dev,
+ {
+ 	struct wireless_dev *wdev = dev->ieee80211_ptr;
+ 
+-	strlcpy(info->driver, wiphy_dev(wdev->wiphy)->driver->name,
+-		sizeof(info->driver));
++	if (wiphy_dev(wdev->wiphy))
++		strlcpy(info->driver, wiphy_dev(wdev->wiphy)->driver->name,
++			sizeof(info->driver));
++	else
++		strlcpy(info->driver, "",sizeof(info->driver));
+ 
+ 	strlcpy(info->version, init_utsname()->release, sizeof(info->version));
+ 
+@@ -20,8 +23,11 @@ static void cfg80211_get_drvinfo(struct net_device *dev,
+ 	else
+ 		strlcpy(info->fw_version, "N/A", sizeof(info->fw_version));
+ 
+-	strlcpy(info->bus_info, dev_name(wiphy_dev(wdev->wiphy)),
+-		sizeof(info->bus_info));
++	if (wiphy_dev(wdev->wiphy))
++		strlcpy(info->bus_info, dev_name(wiphy_dev(wdev->wiphy)),
++			sizeof(info->bus_info));
++	else
++		strlcpy(info->bus_info, "",sizeof(info->bus_info));
+ }
+ 
+ static int cfg80211_get_regs_len(struct net_device *dev)

@@ -1,0 +1,1346 @@
+diff --git a/drivers/misc/mediatek/connectivity/combo/common/linux/wmt_dev.c b/drivers/misc/mediatek/connectivity/combo/common/linux/wmt_dev.c
+index a2482a58..07d66349 100644
+--- a/drivers/misc/mediatek/connectivity/combo/common/linux/wmt_dev.c
++++ b/drivers/misc/mediatek/connectivity/combo/common/linux/wmt_dev.c
+@@ -482,8 +482,8 @@ INT32 wmt_dev_patch_get(PUINT8 pPatchName, osal_firmware **ppPatch, INT32 padSzB
+ {
+ 	INT32 iRet = -1;
+ 	osal_firmware *pfw;
+-	uid_t orig_uid;
+-	gid_t orig_gid;
++	kuid_t orig_uid;
++	kgid_t orig_gid;
+ 
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
+ 	/* struct cred *cred = get_task_cred(current); */
+@@ -515,11 +515,13 @@ INT32 wmt_dev_patch_get(PUINT8 pPatchName, osal_firmware **ppPatch, INT32 padSzB
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))
+ 	orig_uid = cred->fsuid;
+ 	orig_gid = cred->fsgid;
+-	cred->fsuid = cred->fsgid = 0;
++	cred->fsuid = GLOBAL_ROOT_UID;
++	cred->fsgid = GLOBAL_ROOT_GID;
+ #else
+ 	orig_uid = current->fsuid;
+ 	orig_gid = current->fsgid;
+-	current->fsuid = current->fsgid = 0;
++	current->fsuid = GLOBAL_ROOT_UID;
++	current->fsgid = GLOBAL_ROOT_GID;
+ #endif
+ 
+ 	set_fs(get_ds());
+diff --git a/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c b/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
+index 92a39639..7d2857f6 100755
+--- a/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
++++ b/drivers/misc/mediatek/connectivity/combo/drv_wlan/mt6630/wlan/os/linux/gl_kal.c
+@@ -876,8 +876,8 @@ static UINT_32 pvIoBufferUsage;
+ #if CFG_ENABLE_FW_DOWNLOAD
+ 
+ static struct file *filp;
+-static uid_t orgfsuid;
+-static gid_t orgfsgid;
++static kuid_t orgfsuid;
++static kgid_t orgfsgid;
+ static mm_segment_t orgfs;
+ 
+ static PUINT_8 apucFwPath[] = { 
+@@ -947,17 +947,20 @@ WLAN_STATUS kalFirmwareOpen(IN P_GLUE_INFO_T prGlueInfo)
+ #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29))
+ 	orgfsuid = current->fsuid;
+ 	orgfsgid = current->fsgid;
+-	current->fsuid = current->fsgid = 0;
++	current->fsuid = GLOBAL_ROOT_UID;
++	current->fsgid = GLOBAL_ROOT_GID;
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
+ 	struct cred *cred = (struct cred *)get_current_cred();
+ 	orgfsuid = cred->fsuid;
+ 	orgfsgid = cred->fsgid;
+-	cred->fsuid = cred->fsgid = 0;
++	cred->fsuid = GLOBAL_ROOT_UID;
++	cred->fsgid = GLOBAL_ROOT_GID;
+ #else
+ 	struct cred *cred = get_task_cred(current);
+ 	orgfsuid = cred->fsuid;
+ 	orgfsgid = cred->fsgid;
+-	cred->fsuid = cred->fsgid = 0;
++	cred->fsuid = GLOBAL_ROOT_UID;
++	cred->fsgid = GLOBAL_ROOT_GID;
+ #endif
+ 
+ 	ASSERT(prGlueInfo);
+diff --git a/drivers/misc/mediatek/eccci/port_char.c b/drivers/misc/mediatek/eccci/port_char.c
+index 07babb33..3d9fe973 100644
+--- a/drivers/misc/mediatek/eccci/port_char.c
++++ b/drivers/misc/mediatek/eccci/port_char.c
+@@ -679,7 +679,7 @@ static long dev_char_ioctl( struct file *file, unsigned int cmd, unsigned long a
+ 			sig_info.si_signo = sig;
+ 			sig_info.si_code = SI_KERNEL;
+ 			sig_info.si_pid = current->pid;
+-			sig_info.si_uid = current->cred->uid;
++			sig_info.si_uid = from_kuid(&init_user_ns, current->cred->uid);
+ 			ret = kill_proc_info(SIGUSR2, &sig_info, pid);
+ 			CCCI_INF_MSG(md->index, CHAR, "send signal %d to rild %d ret=%ld\n", sig, pid, ret);
+ 		}
+diff --git a/drivers/misc/mediatek/eemcs/lte_main.c b/drivers/misc/mediatek/eemcs/lte_main.c
+index 55d5789b..d024fa02 100644
+--- a/drivers/misc/mediatek/eemcs/lte_main.c
++++ b/drivers/misc/mediatek/eemcs/lte_main.c
+@@ -741,7 +741,7 @@ static int autok_module_init(void)
+     //s_proc->write_proc = lte_autok_writeproc;
+     //s_proc->read_proc = lte_autok_readproc;
+     //s_proc->gid = 1000;
+-    proc_set_user(s_proc, 0, 1000);
++    proc_set_user(s_proc, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+     
+     KAL_RAWPRINT(("/proc/%s created\n", LTE_AUTOK_PROC_NAME));
+     
+diff --git a/drivers/misc/mediatek/mlog/mlog_logger.c b/drivers/misc/mediatek/mlog/mlog_logger.c
+index ad69ebf9..c7591643 100644
+--- a/drivers/misc/mediatek/mlog/mlog_logger.c
++++ b/drivers/misc/mediatek/mlog/mlog_logger.c
+@@ -50,9 +50,6 @@
+ 
+ #define MLOG_ID             ULONG_MAX
+ 
+-#define AID_ROOT            0	/* traditional unix root user */
+-#define AID_SYSTEM          1000	/* system server */
+-
+ #define M_MEMFREE           (1 << 0)
+ #define M_SWAPFREE          (1 << 1)
+ #define M_CACHED            (1 << 2)
+@@ -550,15 +547,15 @@ static void mlog_procinfo(void)
+ 		if (!cred)
+ 			goto unlock_continue;
+ 
+-	/*
+-	 * 1. mediaserver is a suspect in many ANR/FLM cases.
+-	 * 2. procesname is "mediaserver" not "/system/bin/mediaserver"
+-	 */
+-	if (strncmp("mediaserver", p->comm, TASK_COMM_LEN) == 0)
+-		goto collect_proc_mem_info;
++		/*
++		 * 1. mediaserver is a suspect in many ANR/FLM cases.
++		 * 2. procesname is "mediaserver" not "/system/bin/mediaserver"
++		 */
++		if (strncmp("mediaserver", p->comm, TASK_COMM_LEN) == 0)
++			goto collect_proc_mem_info;
+ 
+ 		/* skip root user */
+-		if (cred->uid == AID_ROOT)
++		if (uid_eq(cred->uid, GLOBAL_ROOT_UID))
+ 			goto unlock_continue;
+ 
+ 		real_parent = rcu_dereference(p->real_parent);
+@@ -572,7 +569,7 @@ static void mlog_procinfo(void)
+ 
+ 		if (oom_score_adj == -16) {
+ 			/* only keep system server */
+-			if (cred->uid != AID_SYSTEM)
++			if (!uid_eq(cred->uid, GLOBAL_SYSTEM_UID))
+ 				goto unlock_continue;
+ 		}
+ 
+diff --git a/drivers/misc/mediatek/mmc-host/mt6795/dbg.c b/drivers/misc/mediatek/mmc-host/mt6795/dbg.c
+index 561e8354..3fca53cb 100644
+--- a/drivers/misc/mediatek/mmc-host/mt6795/dbg.c
++++ b/drivers/misc/mediatek/mmc-host/mt6795/dbg.c
+@@ -3699,7 +3699,7 @@ int msdc_debug_proc_init(void)
+ #endif
+ 	if (prEntry) {
+ 		pr_notice("[%s]: successfully create /proc/msdc_debug\n", __func__);
+-		proc_set_user(prEntry, 0, 1001);
++		proc_set_user(prEntry, GLOBAL_ROOT_UID, KGIDT_INIT(1001));
+ 	} else {
+ 		pr_err("[%s]: failed to create /proc/msdc_debug\n", __func__);
+ 	}
+@@ -3746,7 +3746,7 @@ int msdc_debug_proc_init(void)
+ 	tune = proc_create("msdc_tune", 0460, NULL, &msdc_tune_fops);
+ #endif
+ 	if (tune) {
+-		proc_set_user(tune, 0, 1001);
++		proc_set_user(tune, GLOBAL_ROOT_UID, KGIDT_INIT(1001));
+ 		pr_notice("[%s]: successfully create /proc/msdc_tune\n", __func__);
+ 	} else {
+ 		pr_err("[%s]: failed to create /proc/msdc_tune\n", __func__);
+@@ -3769,7 +3769,7 @@ int msdc_debug_proc_init(void)
+ #endif
+ 	if(voltage_flag)
+ 	{
+-		proc_set_user(voltage_flag, 0, 1001);
++		proc_set_user(voltage_flag, GLOBAL_ROOT_UID, KGIDT_INIT(1001));
+ 		printk("[%s]: successfully create /proc/msdc_voltage_flag\n", __func__);
+ 	}else{
+ 		printk("[%s]: failed to create /proc/msdc_voltage_flag\n", __func__);
+diff --git a/drivers/misc/mediatek/mt_logger/mt_storage_logger.c b/drivers/misc/mediatek/mt_logger/mt_storage_logger.c
+index c7cc7845..6f48160e 100644
+--- a/drivers/misc/mediatek/mt_logger/mt_storage_logger.c
++++ b/drivers/misc/mediatek/mt_logger/mt_storage_logger.c
+@@ -1772,14 +1772,14 @@ static int __init storage_logger_init(void)
+ 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger", ACCESS_PERMISSION, NULL,
+ 			  &driver_base_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/storage_logger entry fail");
+ 
+ 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_config", ACCESS_PERMISSION, NULL,
+ 			  &driver_config_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/storage_logger_config entry fail");
+ 
+@@ -1792,14 +1792,14 @@ static int __init storage_logger_init(void)
+ 	CREATE_PROC_ENTRY(procEntry, "driver/thermal_logger_config", ACCESS_PERMISSION, NULL,
+ 			  &driver_thermal_config_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/thermal_logger_config entry fail");
+ 
+ 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_display", ACCESS_PERMISSION, NULL,
+ 			  &storage_logger_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/storage_logger entry fail");
+ 
+@@ -1808,21 +1808,21 @@ static int __init storage_logger_init(void)
+ 	CREATE_PROC_ENTRY(procEntry, "driver/mtk_io_osd_config", ACCESS_PERMISSION, NULL,
+ 			  &mtk_io_osd_config_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/mtk_io_osd entry fail");
+ 
+ 	CREATE_PROC_ENTRY(procEntry, "driver/mtk_io_osd_mmcqd1", ACCESS_PERMISSION, NULL,
+ 			  &mtk_io_osd_mmcqd1_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/mtk_io_osd entry fail");
+ 
+ 	CREATE_PROC_ENTRY(procEntry, "driver/mtk_io_osd_mmcqd2", ACCESS_PERMISSION, NULL,
+ 			  &mtk_io_osd_mmcqd2_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	} else
+ 		SLog_MSG("add /proc/driver/mtk_io_osd entry fail");
+ 
+@@ -1877,7 +1877,7 @@ static int __init storage_logger_init(void)
+ 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_bufsize_malloc", ACCESS_PERMISSION,
+ 			  NULL, &driver_bufsize_proc_fops);
+ 	if (procEntry) {
+-		procEntry->gid = 1000;
++		procEntry->gid = GLOBAL_SYSTEM_GID;
+ 	}
+ 
+ 	CREATE_PROC_ENTRY(procEntry, "driver/storage_logger_filename", ACCESS_PERMISSION, NULL,
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amddulthro.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amddulthro.c
+index fc37a29f..9e5a948c 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amddulthro.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amddulthro.c
+@@ -665,9 +665,9 @@ static int amddulthro_proc_register(void)
+         entry = proc_create("tm_pid", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, amddulthro_proc_dir, &amddulthro_pid_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ #endif // CONFIG_SIGNAL_USER_SPACE
+@@ -675,9 +675,9 @@ static int amddulthro_proc_register(void)
+         entry = proc_create("amddulthro_param", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, amddulthro_proc_dir, &amddulthro_param_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amdtxctrl.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amdtxctrl.c
+index 12332dd0..cc729c55 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amdtxctrl.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amdtxctrl.c
+@@ -577,7 +577,7 @@ static int amdtxctrl_proc_register(void)
+         if (entry) {
+             entry->read_proc = amdtxctrl_pid_read;
+             entry->write_proc = amdtxctrl_pid_write;
+-            entry->gid = 1000; // allow system process to write this proc
++            entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+         }
+ #endif // CONFIG_SIGNAL_USER_SPACE
+ 
+@@ -585,7 +585,7 @@ static int amdtxctrl_proc_register(void)
+         if (entry) {
+             entry->read_proc = amdtxctrl_param_read;
+             entry->write_proc = amdtxctrl_param_write;
+-            entry->gid = 1000; // allow system process to write this proc
++            entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+         }
+     }
+     return 0;
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amutt.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amutt.c
+index 8019a933..33c36204 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amutt.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_amutt.c
+@@ -620,27 +620,27 @@ static int amutt_proc_register(void)
+         entry = proc_create("clamutt_param", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, amutt_proc_dir, &amutt_param_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+         entry = proc_create("clamutt_asparam", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, amutt_proc_dir, &amutt_asparam_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+         entry = proc_create("clamutt_dbg", S_IRUSR | S_IWUSR, amutt_proc_dir, &amutt_dbg_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_bcct.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_bcct.c
+index 1ec1e976..429898b4 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_bcct.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_bcct.c
+@@ -425,9 +425,9 @@ static int __init mtk_cooler_bcct_init(void)
+ 						                   __func__);
+ 		} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+   }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddtxpwr.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddtxpwr.c
+index 71e1ad63..3feb9ab8 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddtxpwr.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddtxpwr.c
+@@ -288,7 +288,7 @@ static int __init mtk_cooler_mddtxpwr_init(void)
+       entry->read_proc = _mtk_cl_mddtxpwr_proc_read;
+       entry->write_proc = _mtk_cl_mddtxpwr_proc_write;
+       entry->data = cl_mddtxpwr_state;
+-      entry->gid = 1000; // allow system process to write this proc
++      entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+     }
+     mtk_cooler_mddtxpwr_dprintk("[mtk_cooler_mddtxpwr_init] proc file created: %x \n", entry->data);
+   }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddulthro.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddulthro.c
+index c56e4515..7ba13285 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddulthro.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mddulthro.c
+@@ -288,7 +288,7 @@ static int __init mtk_cooler_mddulthro_init(void)
+       entry->read_proc = _mtk_cl_mddulthro_proc_read;
+       entry->write_proc = _mtk_cl_mddulthro_proc_write;
+       entry->data = cl_mddulthro_state;
+-      entry->gid = 1000; // allow system process to write this proc
++      entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+     }
+     mtk_cooler_mddulthro_dprintk("[mtk_cooler_mddulthro_init] proc file created: %x \n", entry->data);
+   }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdtxpwr.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdtxpwr.c
+index e19f8203..6fc1a14e 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdtxpwr.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdtxpwr.c
+@@ -288,7 +288,7 @@ static int __init mtk_cooler_mdtxpwr_init(void)
+       entry->read_proc = _mtk_cl_mdtxpwr_proc_read;
+       entry->write_proc = _mtk_cl_mdtxpwr_proc_write;
+       entry->data = cl_mdtxpwr_state;
+-      entry->gid = 1000; // allow system process to write this proc
++      entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+     }
+     mtk_cooler_mdtxpwr_dprintk("[mtk_cooler_mdtxpwr_init] proc file created: %x \n", entry->data);
+   }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdulthro.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdulthro.c
+index 2fd9f79f..d5e23c2c 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdulthro.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mdulthro.c
+@@ -812,7 +812,7 @@ static int mdulthro_proc_register(void)
+           entry->read_proc = _mtk_cl_mdulthro_proc_read;
+           entry->write_proc = _mtk_cl_mdulthro_proc_write;
+           entry->data = cl_mdulthro_state;
+-          entry->gid = 1000; // allow system process to write this proc
++          entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+         }
+ #endif
+ 
+@@ -820,14 +820,14 @@ static int mdulthro_proc_register(void)
+         if (entry) {
+             entry->read_proc = mdulthro_pid_read;
+             entry->write_proc = mdulthro_pid_write;
+-            entry->gid = 1000; // allow system process to write this proc
++            entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+         }
+ 
+         entry = create_proc_entry("mdulthro_param", S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP, mdulthro_proc_dir);
+         if (entry) {
+             entry->read_proc = mdulthro_param_read;
+             entry->write_proc = mdulthro_param_write;
+-            entry->gid = 1000; // allow system process to write this proc
++            entry->gid = GLOBAL_SYSTEM_GID; // allow system process to write this proc
+         }
+ 
+         entry = create_proc_entry("tx_thro", S_IRUGO | S_IWUSR, mdulthro_proc_dir);
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mutt.c b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mutt.c
+index 1dbdbaac..b5d3a182 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mutt.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_cooler_mutt.c
+@@ -335,9 +335,9 @@ static int __init mtk_cooler_mutt_init(void)
+             entry = proc_create("clmutt", S_IRUGO | S_IWUSR | S_IWGRP, dir_entry, &cl_mutt_fops);
+             if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-                proc_set_user(entry, 0, 1000);
++                proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-                entry->gid = 1000;
++                entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+             }
+         }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_abb.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_abb.c
+index 7b076820..8c0048e1 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_abb.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_abb.c
+@@ -532,9 +532,9 @@ static int __init mtktsabb_init(void)
+         entry = proc_create("tzabb", S_IRUGO | S_IWUSR | S_IWGRP, mtktsabb_dir, &mtktsabb_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_all_ts.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_all_ts.c
+index 3d2d5f60..6d369c9b 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_all_ts.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_all_ts.c
+@@ -1205,36 +1205,36 @@ static int __init tsallts_init(void)
+         entry = proc_create("tzts1",  S_IRUGO | S_IWUSR | S_IWGRP, tsallts_dir, &tsallts_fops1);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+         entry = proc_create("tzts2",  S_IRUGO | S_IWUSR | S_IWGRP, tsallts_dir, &tsallts_fops2);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+         entry = proc_create("tzts3",  S_IRUGO | S_IWUSR | S_IWGRP, tsallts_dir, &tsallts_fops3);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+         entry = proc_create("tzts4",  S_IRUGO | S_IWUSR | S_IWGRP, tsallts_dir, &tsallts_fops4);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_battery.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_battery.c
+index 092746c1..989e1466 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_battery.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_battery.c
+@@ -620,9 +620,9 @@ static int __init mtktsbattery_init(void)
+         entry = proc_create("tzbattery", S_IRUGO | S_IWUSR | S_IWGRP, mtktsbattery_dir, &mtkts_battery_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_bts.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_bts.c
+index 92bb20b4..a4eb8067 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_bts.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_bts.c
+@@ -1163,18 +1163,18 @@ static int __init mtkts_AP_init(void)
+ 		entry = proc_create("tzbts", S_IRUGO | S_IWUSR | S_IWGRP, mtkts_AP_dir, &mtkts_AP_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else // kernel ver
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif // kernel ver
+ 		}
+ 
+ 		entry = proc_create("tzbts_param", S_IRUGO | S_IWUSR | S_IWGRP, mtkts_AP_dir, &mtkts_AP_param_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else // kernel ver
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif // kernel ver
+ 		}
+ 
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_btsmdpa.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_btsmdpa.c
+index c026beff..bbad1b72 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_btsmdpa.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_btsmdpa.c
+@@ -1154,18 +1154,18 @@ static int __init mtkts_btsmdpa_init(void)
+ 		entry = proc_create("tzbtspa", S_IRUGO | S_IWUSR | S_IWGRP, mtkts_btsmdpa_dir, &mtkts_btsmdpa_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else // kernel ver
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif // kernel ver
+ 		}
+ 
+ 		entry = proc_create("tzbtspa_param", S_IRUGO | S_IWUSR | S_IWGRP, mtkts_btsmdpa_dir, &mtkts_btsmdpa_param_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else // kernel ver
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif // kernel ver
+ 		}
+ 
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_buck.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_buck.c
+index d2ffa774..4a93de6f 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_buck.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_buck.c
+@@ -718,9 +718,9 @@ static int __init tsbuck_init(void)
+ 		entry = proc_create("tzbuck",  S_IRUGO | S_IWUSR | S_IWGRP, tsbuck_dir, &tsbuck_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_cpu.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_cpu.c
+index 0352e6bc..ff5e5067 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_cpu.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_cpu.c
+@@ -5067,9 +5067,9 @@ static int __init tscpu_init(void)
+ 		entry = proc_create("tzcpu", S_IRUGO | S_IWUSR | S_IWGRP, mtktscpu_dir, &mtktscpu_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+@@ -5088,18 +5088,18 @@ static int __init tscpu_init(void)
+         entry = proc_create("clatm_setting", S_IRUGO | S_IWUSR | S_IWGRP, mtktscpu_dir, &mtktscpu_dtm_setting_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+         entry = proc_create("clatm_gpu_threshold", S_IRUGO | S_IWUSR | S_IWGRP, mtktscpu_dir, &mtktscpu_gpu_threshold_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ #endif // #if CPT_ADAPTIVE_AP_COOLER
+@@ -5108,9 +5108,9 @@ static int __init tscpu_init(void)
+ 		entry = proc_create("tzcpu_fastpoll", S_IRUGO | S_IWUSR | S_IWGRP, mtktscpu_dir, &mtktscpu_fastpoll_fops);
+ 		if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ #endif // #if MTKTSCPU_FAST_POLLING
+@@ -5118,9 +5118,9 @@ static int __init tscpu_init(void)
+ 		entry = proc_create("tzcpu_Tj_out_via_HW_pin", S_IRUGO | S_IWUSR, mtktscpu_dir, &mtktscpu_Tj_out_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+@@ -5128,9 +5128,9 @@ static int __init tscpu_init(void)
+ 		entry = proc_create("tzcpu_GPIO_out_monitor", S_IRUGO | S_IWUSR, mtktscpu_dir, &mtktscpu_GPIO_out_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ #endif
+@@ -5139,9 +5139,9 @@ static int __init tscpu_init(void)
+ 		entry = proc_create("clatm", S_IRUGO | S_IWUSR, mtktscpu_dir, &mtktscpu_atm_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+         /* -ASC- */
+@@ -5150,9 +5150,9 @@ static int __init tscpu_init(void)
+         entry = proc_create("clthp", S_IRUGO | S_IWUSR, mtktscpu_dir, &mtktscpu_thp_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ #endif
+@@ -5161,9 +5161,9 @@ static int __init tscpu_init(void)
+         entry = proc_create("clctm", S_IRUGO | S_IWUSR, mtktscpu_dir, &mtktscpu_ctm_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ #endif
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa.c
+index b423c7ce..31ff172c 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa.c
+@@ -562,9 +562,9 @@ static int __init mtktspa_init(void)
+         entry = proc_create("tzpa", S_IRUGO | S_IWUSR | S_IWGRP, mtktspa_dir, &mtktspa_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 	}
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa_thput.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa_thput.c
+index 29b7d671..30c91b3e 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa_thput.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pa_thput.c
+@@ -688,9 +688,9 @@ static int __init mtk_mdm_txpwr_init(void)
+ 				&mtk_mdm_proc_mdinfo_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+@@ -699,9 +699,9 @@ static int __init mtk_mdm_txpwr_init(void)
+ 				&mtk_mdm_proc_mdinfoex_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+@@ -710,9 +710,9 @@ static int __init mtk_mdm_txpwr_init(void)
+ 				&mtk_mdm_proc_mdinfoex_threshold_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ #endif
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pmic.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pmic.c
+index faf7b86d..0ba0b029 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pmic.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_pmic.c
+@@ -722,9 +722,9 @@ static int __init mtktspmic_init(void)
+         entry = proc_create("tzpmic", S_IRUGO | S_IWUSR | S_IWGRP, mtktspmic_dir, &mtktspmic_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 	    }
+ 	}
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_popram.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_popram.c
+index 394f173f..42ab836d 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_popram.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_popram.c
+@@ -562,9 +562,9 @@ static int __init mtktspopram_init(void)
+         entry = proc_create("tzpopram", S_IRUGO | S_IWUSR | S_IWGRP, mtktspopram_dir, &mtktspopram_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_wmt.c b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_wmt.c
+index 0af95b3f..4ba31722 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/mtk_ts_wmt.c
++++ b/drivers/misc/mediatek/thermal/mt6795/mtk_ts_wmt.c
+@@ -1272,9 +1272,9 @@ static int wmt_tm_proc_register(void)
+ 				&_wmt_tm_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+@@ -1283,9 +1283,9 @@ static int wmt_tm_proc_register(void)
+ 				&_tm_pid_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+@@ -1294,9 +1294,9 @@ static int wmt_tm_proc_register(void)
+ 				&_wmt_val_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+ 
+@@ -1307,9 +1307,9 @@ static int wmt_tm_proc_register(void)
+ 				&_wfd_stat_fops);
+         if (entry) {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mt6795/tm_nth.c b/drivers/misc/mediatek/thermal/mt6795/tm_nth.c
+index 9bba61f8..606327cd 100644
+--- a/drivers/misc/mediatek/thermal/mt6795/tm_nth.c
++++ b/drivers/misc/mediatek/thermal/mt6795/tm_nth.c
+@@ -634,9 +634,9 @@ static int __init mtk_cooler_tm_nth_init(void)
+         mtk_cooler_tm_nth_dprintk_always("[%s] driver/tm_nth creation failed\n", __func__);
+     } else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-        proc_set_user(entry, 0, 1000);
++        proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-        entry->gid = 1000;
++        entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+     }
+ 
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c b/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
+index 17fee69c..7252c29e 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
+@@ -385,9 +385,9 @@ static int __init mtk_cooler_shutdown_init(void)
+ 						    __func__);
+ 		} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-			proc_set_user(entry, 0, 1000);
++			proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-			entry->gid = 1000;
++			entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 	
+@@ -399,9 +399,9 @@ static int __init mtk_cooler_shutdown_init(void)
+ 						    __func__);
+ 		} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-			proc_set_user(entry, 0, 1000);
++			proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-			entry->gid = 1000;
++			entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 		}
+ 
+@@ -413,9 +413,9 @@ static int __init mtk_cooler_shutdown_init(void)
+ 						    __func__);
+         } else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-            proc_set_user(entry, 0, 1000);
++            proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-            entry->gid = 1000;
++            entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+         }
+     }
+diff --git a/drivers/misc/mediatek/thermal/mtk_thermal_monitor.c b/drivers/misc/mediatek/thermal/mtk_thermal_monitor.c
+index 5fac575d..f6076239 100644
+--- a/drivers/misc/mediatek/thermal/mtk_thermal_monitor.c
++++ b/drivers/misc/mediatek/thermal/mtk_thermal_monitor.c
+@@ -1599,9 +1599,9 @@ static int __init mtkthermal_init(void)
+         THRML_ERROR_LOG("%s Can not create mtm_monitor\n", __func__);
+     } else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-        proc_set_user(entry, 0, 1000);
++        proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-        entry->gid = 1000;
++        entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+     }
+ 
+@@ -1619,9 +1619,9 @@ static int __init mtkthermal_init(void)
+ 		THRML_ERROR_LOG("%s Can not create mtm_scen_call\n", __func__);
+ 	} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-        proc_set_user(entry, 0, 1000);
++        proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-        entry->gid = 1000;
++        entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+     }
+ 
+@@ -2173,9 +2173,9 @@ struct thermal_zone_device *mtk_thermal_zone_device_register_wrapper
+ 			THRML_ERROR_LOG("%s proc file not created: %p\n", __func__, tz);
+ 		} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-			proc_set_user(entry, 0, 1000);
++			proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-			entry->gid = 1000;
++			entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 			THRML_LOG("%s proc file created: %p\n", __func__, tz);
+ 		}
+@@ -2479,9 +2479,9 @@ struct thermal_cooling_device *mtk_thermal_cooling_device_register_wrapper
+ 			THRML_ERROR_LOG("%s proc file not created: %p\n", __func__, mcdata);
+ 		} else {
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)
+-			proc_set_user(entry, 0, 1000);
++			proc_set_user(entry, GLOBAL_ROOT_UID, GLOBAL_SYSTEM_GID);
+ #else
+-			entry->gid = 1000;
++			entry->gid = GLOBAL_SYSTEM_GID;
+ #endif
+ 			THRML_LOG("%s proc file created: %p\n", __func__, mcdata);
+ 		}
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index dcf3c5c9..7eeb38ec 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -1032,7 +1032,7 @@ out:
+ 
+ static int oom_adjust_permission(struct inode *inode, int mask)
+ {
+-	uid_t uid;
++	kuid_t uid;
+ 	struct task_struct *p;
+ 
+ 	p = get_proc_task(inode);
+@@ -1045,7 +1045,7 @@ static int oom_adjust_permission(struct inode *inode, int mask)
+ 	 * System Server (uid == 1000) is granted access to oom_adj of all 
+ 	 * android applications (uid > 10000) as and services (uid >= 1000)
+ 	 */
+-	if (p && (current_fsuid() == 1000) && (uid >= 1000)) {
++	if (p && uid_eq(current_fsuid(), GLOBAL_SYSTEM_UID) && uid_gte(uid, GLOBAL_SYSTEM_UID)) {
+ 		if (inode->i_mode >> 6 & mask) {
+ 			return 0;
+ 		}
+diff --git a/include/net/route.h b/include/net/route.h
+index 647bb2ad..c530f020 100644
+--- a/include/net/route.h
++++ b/include/net/route.h
+@@ -142,7 +142,7 @@ static inline struct rtable *ip_route_output_ports(struct net *net, struct flowi
+ 	flowi4_init_output(fl4, oif, sk ? sk->sk_mark : 0, tos,
+ 			   RT_SCOPE_UNIVERSE, proto,
+ 			   sk ? inet_sk_flowi_flags(sk) : 0,
+-			   daddr, saddr, dport, sport, sk ? sock_i_uid(sk) : 0);
++			   daddr, saddr, dport, sport, sk ? sock_i_uid(sk) : GLOBAL_ROOT_UID);
+ 	if (sk)
+ 		security_sk_classify_flow(sk, flowi4_to_flowi(fl4));
+ 	return ip_route_output_flow(net, fl4, sk);
+diff --git a/kernel/cgroup.c b/kernel/cgroup.c
+index 5c9856d1..aede1d83 100644
+--- a/kernel/cgroup.c
++++ b/kernel/cgroup.c
+@@ -2166,8 +2166,8 @@ int subsys_cgroup_allow_attach(struct cgroup *cgrp, struct cgroup_taskset *tset)
+ 	cgroup_taskset_for_each(task, cgrp, tset) {
+ 		tcred = __task_cred(task);
+ 
+-		if (current != task && cred->euid != tcred->uid &&
+-		    cred->euid != tcred->suid)
++		if (current != task && !uid_eq(cred->euid, tcred->uid) &&
++		    !uid_eq(cred->euid, tcred->suid))
+ 			return -EACCES;
+ 	}
+ 
+diff --git a/kernel/cpuset.c b/kernel/cpuset.c
+index 66a980fc..ad0d2739 100644
+--- a/kernel/cpuset.c
++++ b/kernel/cpuset.c
+@@ -1429,7 +1429,7 @@ static int cpuset_allow_attach(struct cgroup *cgrp,
+ 		tcred = __task_cred(task);
+ 
+ 		if ((current != task) && !capable(CAP_SYS_ADMIN) &&
+-		    cred->euid != tcred->uid && cred->euid != tcred->suid)
++		    !uid_eq(cred->euid, tcred->uid) && !uid_eq(cred->euid, tcred->suid))
+ 			return -EACCES;
+ 	}
+ 
+diff --git a/net/ipv4/route.c b/net/ipv4/route.c
+index 27173235..9fcaa6d9 100644
+--- a/net/ipv4/route.c
++++ b/net/ipv4/route.c
+@@ -532,7 +532,7 @@ static void __build_flow_key(struct flowi4 *fl4, struct sock *sk,
+ 			   RT_SCOPE_UNIVERSE, prot,
+ 			   flow_flags,
+ 			   iph->daddr, iph->saddr, 0, 0,
+-			   sk ? sock_i_uid(sk) : 0);
++			   sk ? sock_i_uid(sk) : GLOBAL_ROOT_UID);
+ }
+ 
+ static void build_skb_flow_key(struct flowi4 *fl4, const struct sk_buff *skb,
+diff --git a/net/ipv4/tcp.c b/net/ipv4/tcp.c
+index 02ea4364..11661cf8 100644
+--- a/net/ipv4/tcp.c
++++ b/net/ipv4/tcp.c
+@@ -1266,7 +1266,7 @@ out_nopush:
+ 	release_sock(sk);
+ 
+ 	if (copied + copied_syn)
+-		uid_stat_tcp_snd(current_uid(), copied + copied_syn);
++		uid_stat_tcp_snd(from_kuid(&init_user_ns, current_uid()), copied + copied_syn);
+ 	return copied + copied_syn;
+ 
+ do_fault:
+@@ -1571,7 +1571,7 @@ int tcp_read_sock(struct sock *sk, read_descriptor_t *desc,
+ 	if (copied > 0) {
+ 		tcp_recv_skb(sk, seq, &offset);
+ 		tcp_cleanup_rbuf(sk, copied);
+-		uid_stat_tcp_rcv(current_uid(), copied);
++		uid_stat_tcp_rcv(from_kuid(&init_user_ns, current_uid()), copied);
+ 	}
+ 	return copied;
+ }
+@@ -1978,7 +1978,7 @@ skip_copy:
+ 	release_sock(sk);
+ 
+ 	if (copied > 0)
+-		uid_stat_tcp_rcv(current_uid(), copied);
++		uid_stat_tcp_rcv(from_kuid(&init_user_ns, current_uid()), copied);
+ 	return copied;
+ 
+ out:
+@@ -1988,7 +1988,7 @@ out:
+ recv_urg:
+ 	err = tcp_recv_urg(sk, msg, len, flags);
+ 	if (err > 0)
+-		uid_stat_tcp_rcv(current_uid(), err);
++		uid_stat_tcp_rcv(from_kuid(&init_user_ns, current_uid()), err);
+ 	goto out;
+ 
+ recv_sndq:
+diff --git a/net/ipv4/tcp_ipv4.c b/net/ipv4/tcp_ipv4.c
+index 35c01585..4faeda15 100644
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -2223,7 +2223,7 @@ EXPORT_SYMBOL(tcp_v4_destroy_sock);
+ void tcp_v4_handle_retrans_time_by_uid(struct uid_err uid_e)
+ {
+     unsigned int bucket;
+-    uid_t skuid = (uid_t)(uid_e.appuid);
++    kuid_t skuid = KUIDT_INIT((uid_t)(uid_e.appuid));
+ 	struct inet_connection_sock *icsk = NULL;//inet_csk(sk);
+ 
+ 
+@@ -2241,11 +2241,11 @@ void tcp_v4_handle_retrans_time_by_uid(struct uid_err uid_e)
+                 continue;
+     
+             if(sk->sk_socket){
+-                if(SOCK_INODE(sk->sk_socket)->i_uid != skuid)
++                if(!uid_eq(SOCK_INODE(sk->sk_socket)->i_uid, skuid))
+                     continue;
+                 else
+                     printk("[mmspb] tcp_v4_handle_retrans_time_by_uid socket uid(%d) match!",
+-                        SOCK_INODE(sk->sk_socket)->i_uid);
++                        from_kuid(&init_user_ns, SOCK_INODE(sk->sk_socket)->i_uid));
+             } else{
+                 continue;
+ 	    }
+@@ -2282,7 +2282,7 @@ void tcp_v4_handle_retrans_time_by_uid(struct uid_err uid_e)
+ void tcp_v4_reset_connections_by_uid(struct uid_err uid_e)
+ {
+     unsigned int bucket;
+-    uid_t skuid = (uid_t)(uid_e.appuid);
++    kuid_t skuid = KUIDT_INIT((uid_t)(uid_e.appuid));
+ 
+     for (bucket = 0; bucket < tcp_hashinfo.ehash_mask; bucket++) {
+         struct hlist_nulls_node *node;
+@@ -2299,11 +2299,11 @@ restart:
+                 continue;
+     
+             if(sk->sk_socket){
+-                if(SOCK_INODE(sk->sk_socket)->i_uid != skuid)
++                if(!uid_eq(SOCK_INODE(sk->sk_socket)->i_uid, skuid))
+                     continue;
+                 else
+                     printk(KERN_INFO "SIOCKILLSOCK socket uid(%d) match!",
+-                        SOCK_INODE(sk->sk_socket)->i_uid);
++                        from_kuid(&init_user_ns, SOCK_INODE(sk->sk_socket)->i_uid));
+             } else{
+                 continue;
+ 	    }
+diff --git a/net/netfilter/xt_qtaguid.c b/net/netfilter/xt_qtaguid.c
+index 1e891875..71942bb4 100644
+--- a/net/netfilter/xt_qtaguid.c
++++ b/net/netfilter/xt_qtaguid.c
+@@ -145,22 +145,22 @@ static bool can_manipulate_uids(void)
+ {
+ 	/* root pwnd */
+ 	return in_egroup_p(xt_qtaguid_ctrl_file->gid)
+-		|| unlikely(!current_fsuid()) || unlikely(!proc_ctrl_write_limited)
+-		|| unlikely(current_fsuid() == xt_qtaguid_ctrl_file->uid);
++		|| unlikely(uid_eq(current_fsuid(), GLOBAL_ROOT_UID)) || unlikely(!proc_ctrl_write_limited)
++		|| unlikely(uid_eq(current_fsuid(), xt_qtaguid_ctrl_file->uid));
+ }
+ 
+ static bool can_impersonate_uid(uid_t uid)
+ {
+-	return uid == current_fsuid() || can_manipulate_uids();
++	return uid_eq(KUIDT_INIT(uid), current_fsuid()) || can_manipulate_uids();
+ }
+ 
+ static bool can_read_other_uid_stats(uid_t uid)
+ {
+ 	/* root pwnd */
+ 	return in_egroup_p(xt_qtaguid_stats_file->gid)
+-		|| unlikely(!current_fsuid()) || uid == current_fsuid()
++		|| unlikely(uid_eq(current_fsuid(), GLOBAL_ROOT_UID)) || uid_eq(KUIDT_INIT(uid), current_fsuid())
+ 		|| unlikely(!proc_stats_readall_limited)
+-		|| unlikely(current_fsuid() == xt_qtaguid_ctrl_file->uid);
++		|| unlikely(uid_eq(current_fsuid(), xt_qtaguid_ctrl_file->uid));
+ }
+ 
+ static inline void dc_add_byte_packets(struct data_counters *counters, int set,
+@@ -542,7 +542,7 @@ static void put_utd_entry(struct uid_tag_data *utd_entry)
+ 			 "erase utd_entry=%p uid=%u "
+ 			 "by pid=%u tgid=%u uid=%u\n", __func__,
+ 			 utd_entry, utd_entry->uid,
+-			 current->pid, current->tgid, current_fsuid());
++			 current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 		BUG_ON(utd_entry->num_active_tags);
+ 		rb_erase(&utd_entry->node, &uid_tag_data_tree);
+ 		kfree(utd_entry);
+@@ -744,7 +744,7 @@ static int iface_stat_fmt_proc_show(struct seq_file *m, void *v)
+ 
+ 
+ 	CT_DEBUG("qtaguid:proc iface_stat_fmt pid=%u tgid=%u uid=%u\n",
+-		 current->pid, current->tgid, current_fsuid());
++		 current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 
+ 	iface_entry = list_entry(v, struct iface_stat, list);
+ 
+@@ -1657,6 +1657,7 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ 	bool got_sock = false;
+ 	struct sock *sk;
+ 	uid_t sock_uid;
++	gid_t sock_gid;
+ 	bool res;
+ 
+ 	if (unlikely(module_passive))
+@@ -1720,7 +1721,7 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ 			sk->sk_socket ? sk->sk_socket->file : (void *)-1LL);
+ 		filp = sk->sk_socket ? sk->sk_socket->file : NULL;
+ 		MT_DEBUG("qtaguid[%d]: filp...uid=%u\n",
+-			par->hooknum, filp ? filp->f_cred->fsuid : -1);
++			par->hooknum, filp ? filp->f_cred->fsuid : INVALID_UID);
+ 	}
+ 
+ 	if (sk == NULL || sk->sk_socket == NULL) {
+@@ -1756,7 +1757,9 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ 		atomic64_inc(&qtu_events.match_no_sk_file);
+ 		goto put_sock_ret_res;
+ 	}
+-	sock_uid = filp->f_cred->fsuid;
++	sock_uid = from_kuid(&init_user_ns, filp->f_cred->fsuid);
++	sock_gid = from_kgid(&init_user_ns, filp->f_cred->fsgid);
++	
+ 	/*
+ 	 * TODO: unhack how to force just accounting.
+ 	 * For now we only do iface stats when the uid-owner is not requested
+@@ -1771,8 +1774,8 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ 	 * Thus (!a && b) || (a && !b) == a ^ b
+ 	 */
+ 	if (info->match & XT_QTAGUID_UID)
+-		if ((filp->f_cred->fsuid >= info->uid_min &&
+-		     filp->f_cred->fsuid <= info->uid_max) ^
++		if ((sock_uid >= info->uid_min &&
++		     sock_uid <= info->uid_max) ^
+ 		    !(info->invert & XT_QTAGUID_UID)) {
+ 			MT_DEBUG("qtaguid[%d]: leaving uid not matching\n",
+ 				 par->hooknum);
+@@ -1780,8 +1783,8 @@ static bool qtaguid_mt(const struct sk_buff *skb, struct xt_action_param *par)
+ 			goto put_sock_ret_res;
+ 		}
+ 	if (info->match & XT_QTAGUID_GID)
+-		if ((filp->f_cred->fsgid >= info->gid_min &&
+-				filp->f_cred->fsgid <= info->gid_max) ^
++		if ((sock_gid >= info->gid_min &&
++			 sock_gid <= info->gid_max) ^
+ 			!(info->invert & XT_QTAGUID_GID)) {
+ 			MT_DEBUG("qtaguid[%d]: leaving gid not matching\n",
+ 				par->hooknum);
+@@ -1920,7 +1923,7 @@ static int qtaguid_ctrl_proc_show(struct seq_file *m, void *v)
+ 	long f_count;
+ 
+ 	CT_DEBUG("qtaguid: proc ctrl pid=%u tgid=%u uid=%u\n",
+-		 current->pid, current->tgid, current_fsuid());
++		 current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 
+ 	if (sock_tag_entry != SEQ_START_TOKEN) {
+ 		uid = get_uid_from_tag(sock_tag_entry->tag);
+@@ -2006,11 +2009,11 @@ static int ctrl_cmd_delete(const char *input)
+ 		goto err;
+ 	}
+ 	if (argc < 3) {
+-		uid = current_fsuid();
++		uid = from_kuid(&init_user_ns, current_fsuid());
+ 	} else if (!can_impersonate_uid(uid)) {
+ 		pr_info("qtaguid: ctrl_delete(%s): "
+ 			"insufficient priv from pid=%u tgid=%u uid=%u\n",
+-			input, current->pid, current->tgid, current_fsuid());
++			input, current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 		res = -EPERM;
+ 		goto err;
+ 	}
+@@ -2161,7 +2164,7 @@ static int ctrl_cmd_counter_set(const char *input)
+ 	if (!can_manipulate_uids()) {
+ 		pr_info("qtaguid: ctrl_counterset(%s): "
+ 			"insufficient priv from pid=%u tgid=%u uid=%u\n",
+-			input, current->pid, current->tgid, current_fsuid());
++			input, current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 		res = -EPERM;
+ 		goto err;
+ 	}
+@@ -2222,7 +2225,7 @@ static int ctrl_cmd_tag(const char *input)
+ 		pr_info("qtaguid: ctrl_tag(%s): failed to lookup"
+ 			" sock_fd=%d err=%d pid=%u tgid=%u uid=%u\n",
+ 			input, sock_fd, res, current->pid, current->tgid,
+-			current_fsuid());
++			from_kuid(&init_user_ns, current_fsuid()));
+ 		goto err;
+ 	}
+ 	CT_DEBUG("qtaguid: ctrl_tag(%s): socket->...->f_count=%ld ->sk=%p\n",
+@@ -2238,17 +2241,17 @@ static int ctrl_cmd_tag(const char *input)
+ 	CT_DEBUG("qtaguid: ctrl_tag(%s): "
+ 		 "pid=%u tgid=%u uid=%u euid=%u fsuid=%u "
+ 		 "ctrl.gid=%u in_group()=%d in_egroup()=%d\n",
+-		 input, current->pid, current->tgid, current_uid(),
+-		 current_euid(), current_fsuid(),
++		 input, current->pid, current->tgid, from_kuid(&init_user_ns, current_uid()),
++		 from_kuid(&init_user_ns, current_euid()), from_kuid(&init_user_ns, current_fsuid()),
+ 		 xt_qtaguid_ctrl_file->gid,
+ 		 in_group_p(xt_qtaguid_ctrl_file->gid),
+ 		 in_egroup_p(xt_qtaguid_ctrl_file->gid));
+ 	if (argc < 4) {
+-		uid = current_fsuid();
++		uid = from_kuid(&init_user_ns, current_fsuid());
+ 	} else if (!can_impersonate_uid(uid)) {
+ 		pr_info("qtaguid: ctrl_tag(%s): "
+ 			"insufficient priv from pid=%u tgid=%u uid=%u\n",
+-			input, current->pid, current->tgid, current_fsuid());
++			input, current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 		res = -EPERM;
+ 		goto err_put;
+ 	}
+@@ -2315,7 +2318,7 @@ static int ctrl_cmd_tag(const char *input)
+ 				"User space forgot to open /dev/xt_qtaguid? "
+ 				"pid=%u tgid=%u uid=%u\n", __func__,
+ 				current->pid, current->tgid,
+-				current_fsuid());
++				from_kuid(&init_user_ns, current_fsuid()));
+ 		else
+ 			list_add(&sock_tag_entry->list,
+ 				 &pqd_entry->sock_tag_list);
+@@ -2370,7 +2373,7 @@ static int ctrl_cmd_untag(const char *input)
+ 		pr_info("qtaguid: ctrl_untag(%s): failed to lookup"
+ 			" sock_fd=%d err=%d pid=%u tgid=%u uid=%u\n",
+ 			input, sock_fd, res, current->pid, current->tgid,
+-			current_fsuid());
++			from_kuid(&init_user_ns, current_fsuid()));
+ 		goto err;
+ 	}
+ 	CT_DEBUG("qtaguid: ctrl_untag(%s): socket->...->f_count=%ld ->sk=%p\n",
+@@ -2404,7 +2407,7 @@ static int ctrl_cmd_untag(const char *input)
+ 		pr_warn_once("qtaguid: %s(): "
+ 			     "User space forgot to open /dev/xt_qtaguid? "
+ 			     "pid=%u tgid=%u uid=%u\n", __func__,
+-			     current->pid, current->tgid, current_fsuid());
++			     current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 	else
+ 		list_del(&sock_tag_entry->list);
+ 	spin_unlock_bh(&uid_tag_data_tree_lock);
+@@ -2447,7 +2450,7 @@ static ssize_t qtaguid_ctrl_parse(const char *input, size_t count)
+ 	ssize_t res;
+ 
+ 	CT_DEBUG("qtaguid: ctrl(%s): pid=%u tgid=%u uid=%u\n",
+-		 input, current->pid, current->tgid, current_fsuid());
++		 input, current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 
+ 	cmd = input[0];
+ 	/* Collect params for commands */
+@@ -2535,7 +2538,7 @@ static int pp_stats_line(struct seq_file *m, struct tag_stat *ts_entry,
+ 			 "from pid=%u tgid=%u uid=%u stats.gid=%u\n",
+ 			 ppi->iface_entry->ifname,
+ 			 get_atag_from_tag(tag), stat_uid,
+-			 current->pid, current->tgid, current_fsuid(),
++			 current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()),
+ 			 xt_qtaguid_stats_file->gid);
+ 		return 0;
+ 	}
+@@ -2738,12 +2741,12 @@ static int qtudev_open(struct inode *inode, struct file *file)
+ 		return 0;
+ 
+ 	DR_DEBUG("qtaguid: qtudev_open(): pid=%u tgid=%u uid=%u\n",
+-		 current->pid, current->tgid, current_fsuid());
++		 current->pid, current->tgid, from_kuid(&init_user_ns, current_fsuid()));
+ 
+ 	spin_lock_bh(&uid_tag_data_tree_lock);
+ 
+ 	/* Look for existing uid data, or alloc one. */
+-	utd_entry = get_uid_data(current_fsuid(), &utd_entry_found);
++	utd_entry = get_uid_data(from_kuid(&init_user_ns, current_fsuid()), &utd_entry_found);
+ 	if (IS_ERR_OR_NULL(utd_entry)) {
+ 		res = PTR_ERR(utd_entry);
+ 		goto err_unlock;
+diff --git a/net/netfilter/xt_quota2.c b/net/netfilter/xt_quota2.c
+index 43285625..b598a934 100644
+--- a/net/netfilter/xt_quota2.c
++++ b/net/netfilter/xt_quota2.c
+@@ -231,7 +231,7 @@ q2_get_counter(const struct xt_quota_mtinfo2 *q)
+ 		spin_unlock_bh(&counter_list_lock);
+ 		goto out;
+ 	}
+-	proc_set_user(p, quota_list_uid, quota_list_gid);
++	proc_set_user(p, KUIDT_INIT(quota_list_uid), KGIDT_INIT(quota_list_gid));
+ 	return e;
+ 
+  out:
